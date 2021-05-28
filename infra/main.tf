@@ -3,23 +3,28 @@ provider "aws" {
   region  = "us-west-1"
 }
 
+resource "aws_key_pair" "ubuntu" {
+  key_name   = "ubuntu"
+  public_key = file("key.pub")
+}
+
 resource "aws_security_group" "ubuntu" {
 
   name        = "ton-challenge-security-group"
   description = "Allow HTTPS, HTTP, SSH"
 
   ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
+    description = "HTTPS"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -46,17 +51,10 @@ resource "aws_security_group" "ubuntu" {
 }
 
 resource "aws_instance" "ubuntu" {
+  key_name      = aws_key_pair.ubuntu.key_name
   ami           = "ami-03ba3948f6c37a4b0"
   instance_type = "t2.micro"
   monitoring    = true
-  user_data     = <<EOF
-                  #!/bin/bash
-                  sudo su
-                  apt-get install apache2 -y
-                  echo "<p> Estou executando na AWS </p>" >> /var/www/html/index.html
-                  sudo chkconfig apache2 on
-                  sudo service start httpd
-                EOF
 
   tags = {
     Name = "ton-ubuntu-server"
@@ -66,6 +64,21 @@ resource "aws_instance" "ubuntu" {
     aws_security_group.ubuntu.id
   ]
 
+  connection {
+    type        = "ssh"
+    user        = "ubuntu"
+    private_key = file("key")
+    host        = self.public_ip
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get -y update",
+      "sudo apt-get -y install nginx",
+      "sudo service nginx start",
+    ]
+  }
+
 }
 
 resource "aws_eip" "ubuntu" {
@@ -74,7 +87,7 @@ resource "aws_eip" "ubuntu" {
 
 }
 
-output "DNS" {
+output "Public_DNS" {
   value = aws_eip.ubuntu.public_dns
 }
 
